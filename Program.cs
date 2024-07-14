@@ -1,9 +1,5 @@
 using dotnet_webserver;
 
-
-const string portNumber = "1234";
-
-
 using (var server = new WebServer())
 {
     try

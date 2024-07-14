@@ -4,7 +4,7 @@ using System.Text;
 
 namespace dotnet_webserver;
 
-public class WebServer : IDisposable
+public class WebServer : IServer
 {
     private readonly HttpListener _listener;
     private readonly string _baseFolder;
@@ -35,7 +35,7 @@ public class WebServer : IDisposable
         _listener.Close();
     }
     
-    private async Task RunServer(HttpListener listener)
+    public async Task RunServer(HttpListener listener)
     {
         while (true)
         {
