@@ -1,20 +1,22 @@
 using dotnet_webserver;
 
-using (var server = new WebServer())
+
+async Task Main(string[] args)
 {
-    try
+    string baseDirectory = args[0];
+
+    using (var server = new WebServer(baseDirectory))
     {
-        server.Start();
-        Console.WriteLine("Server running...");
-        Console.ReadLine();
-    } 
-    catch (Exception ex)
-    {
-        Console.WriteLine(ex);
-    }
-    finally
-    {
-        server.Stop();
+        try
+        {
+            await server.Start();
+            Console.WriteLine("Server running...");
+            Console.ReadLine();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+        }
     }
 }
 

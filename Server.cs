@@ -8,73 +8,100 @@ public class WebServer : IServer
 {
     private readonly HttpListener _listener;
     private readonly string _baseFolder;
+    private bool _isRunning = false;
 
     private static readonly int _maxConnections = 20;
     private static readonly Semaphore _pool = new Semaphore(_maxConnections, _maxConnections);
     
-    public WebServer()
+    public WebServer(string testDirectory)
     {
-        _baseFolder = "cat/";
+        _baseFolder = testDirectory;
         List<IPAddress> ipAddresses = GetLocalHostIPs();
         _listener = InitializeListener(ipAddresses);
     }
 
-    public async void Start()
-    { 
+    public async Task Start()
+    {
         _listener.Start();
+        _isRunning = true;
+        Console.WriteLine($"Server started.");
         await Task.Run(() => RunServer(_listener));
     }
     
     public void Stop()
     {
-        _listener.Stop();
+        Console.WriteLine("Stopping server...");
+        _isRunning = false;
+
+        if (_listener.IsListening)
+        {
+            _listener.Stop();
+        }
+
+        _listener.Close();
+        Console.WriteLine("Server stopped.");
     }
 
     public void Dispose()
     {
+        _isRunning = false;
         _listener.Close();
     }
-    
-    public async Task RunServer(HttpListener listener)
+
+    private async Task RunServer(HttpListener listener)
     {
-        while (true)
+        while (_isRunning)
         {
             try
             {
                 _pool.WaitOne();
+                if (!_isRunning) break;
                 await ProcessRequest(listener);
             }
             catch (HttpListenerException ex)
             {
-                Console.WriteLine(ex);
+                Console.WriteLine($"HttpListener error: {ex}");
+                if (!_isRunning) break;
+            }
+            catch (ObjectDisposedException ex)
+            {
+                Console.WriteLine($"HttpListener has been disposed: {ex}");
+                break;
             }
             catch (InvalidOperationException ex)
             {
                 Console.WriteLine(ex);
             }
         }
+        _pool.Release();
+
     }
 
     private async Task ProcessRequest(HttpListener listener)
     {
-        HttpListenerContext context = await listener.GetContextAsync();
-        _pool.Release();
-
-        try
+        if (_listener.IsListening)
         {
-            AsciiArtPicker asciiPicker = new AsciiArtPicker(_baseFolder);
+            HttpListenerContext context = await listener.GetContextAsync();
 
-            string filePath = asciiPicker.GetRandomFile();
-            
-            byte[] response = await GetFileBytes(context, filePath);
-            context.Response.ContentLength64 = response.Length;
-            
-            await StreamOutput(context, response);
+            try
+            {
+                AsciiArtPicker asciiPicker = new AsciiArtPicker(_baseFolder);
+
+                string filePath = asciiPicker.GetRandomFile();
+                byte[] response = await GetFileBytes(context, filePath);
+                
+                context.Response.ContentLength64 = response.Length;
+
+                await StreamOutput(context, response);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+            }
+
         }
-        catch(Exception ex)
-        {
-            Console.WriteLine(ex);
-        }
+
+        listener.Close();
     }
     
     /**
@@ -84,7 +111,7 @@ public class WebServer : IServer
     private static List<IPAddress> GetLocalHostIPs()
     {
         string hostName = Dns.GetHostName();
-        var host = Dns.GetHostEntry(hostName);
+        IPHostEntry host = Dns.GetHostEntry(hostName);
 
         List<IPAddress> ipAddresses = host.AddressList
             .Where(ip => ip.AddressFamily == AddressFamily.InterNetwork)
@@ -95,18 +122,10 @@ public class WebServer : IServer
 
     private static HttpListener InitializeListener(List<IPAddress> localhostIPs)
     {
-        HttpListener listener = new HttpListener();
+        var listener = new HttpListener();
         
-        listener.Prefixes.Add("http://localhost/");
+        listener.Prefixes.Add("http://localhost:8080/");
         
-        localhostIPs.ForEach(ip =>
-        {
-            string uriPrefix = $"http://{ip.ToString()}/";
-            Console.WriteLine($"Listening on {uriPrefix}");
-            
-            listener.Prefixes.Add(uriPrefix);
-        });
-
         return listener;
     }
 
